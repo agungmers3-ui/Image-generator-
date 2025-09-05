@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seni Nano</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+            color: #1e293b;
+        }
+        .container {
+            max-width: 900px;
+            padding: 2rem;
+        }
+        .loading-animation {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen p-4">
+
+    <div id="app" class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full container flex flex-col items-center space-y-8">
+        <header class="w-full text-center">
+            <h1 class="text-4xl font-bold text-gray-800">Seni Nano</h1>
+            <p class="text-gray-500 mt-2">Ubah ide Anda menjadi gambar menakjubkan dengan AI.</p>
+        </header>
+
+        <main class="w-full flex flex-col md:flex-row space-y-8 md:space-y-0 md:space-x-8">
+
+            <!-- Input Section -->
+            <div class="flex-1 flex flex-col space-y-4">
+                <textarea id="promptInput" rows="5" placeholder="Masukkan deskripsi gambar di sini..."
+                          class="w-full p-4 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200 ease-in-out resize-none"></textarea>
+
+                <div class="flex items-center space-x-4">
+                    <button id="generateBtn" class="flex-1 bg-blue-600 text-white font-semibold py-3 px-6 rounded-full hover:bg-blue-700 transition duration-200 ease-in-out shadow-md">
+                        <span id="buttonText">Buat Gambar</span>
+                        <div id="loadingIndicator" class="hidden loading-animation"></div>
+                    </button>
+                    <div id="messageBox" class="text-red-500 font-medium hidden"></div>
+                </div>
+            </div>
+
+            <!-- Image Display Section -->
+            <div class="flex-1 flex flex-col items-center">
+                <div id="imageContainer" class="w-full h-80 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden border border-gray-300">
+                    <span id="placeholderText" class="text-gray-400">Gambar yang dibuat akan muncul di sini.</span>
+                    <img id="generatedImage" src="" alt="Gambar yang dibuat AI" class="hidden object-contain w-full h-full p-2">
+                </div>
+                <button id="downloadBtn" class="mt-4 bg-gray-800 text-white font-semibold py-2 px-6 rounded-full hover:bg-gray-900 transition duration-200 ease-in-out shadow-md hidden">
+                    <i class="fas fa-download mr-2"></i>Unduh Gambar
+                </button>
+            </div>
+        </main>
+
+        <footer class="text-sm text-gray-400 mt-8 w-full text-center">
+            Didukung oleh model AI Generatif.
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const promptInput = document.getElementById('promptInput');
+            const generateBtn = document.getElementById('generateBtn');
+            const buttonText = document.getElementById('buttonText');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const imageContainer = document.getElementById('imageContainer');
+            const generatedImage = document.getElementById('generatedImage');
+            const placeholderText = document.getElementById('placeholderText');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const messageBox = document.getElementById('messageBox');
+
+            const apiKey = ""; // API key akan disediakan oleh Canvas.
+
+            generateBtn.addEventListener('click', async () => {
+                const userPrompt = promptInput.value.trim();
+
+                if (userPrompt === "") {
+                    showMessage("Mohon masukkan deskripsi gambar.");
+                    return;
+                }
+
+                // Show loading state
+                buttonText.classList.add('hidden');
+                loadingIndicator.classList.remove('hidden');
+                generateBtn.disabled = true;
+                generatedImage.classList.add('hidden');
+                placeholderText.classList.remove('hidden');
+                downloadBtn.classList.add('hidden');
+                showMessage("");
+
+                try {
+                    const payload = {
+                        contents: [{
+                            parts: [{ text: userPrompt }]
+                        }],
+                        generationConfig: {
+                            responseModalities: ['TEXT', 'IMAGE']
+                        },
+                    };
+
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+
+                    let response;
+                    let retries = 0;
+                    const maxRetries = 3;
+                    const delay = (ms) => new Promise(res => setTimeout(res, ms));
+
+                    while (retries < maxRetries) {
+                        try {
+                            response = await fetch(apiUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
+                            });
+
+                            if (response.status === 429) { // Too many requests
+                                retries++;
+                                if (retries < maxRetries) {
+                                    const retryAfter = Math.pow(2, retries) * 1000;
+                                    await delay(retryAfter);
+                                } else {
+                                    throw new Error("Terlalu banyak permintaan. Silakan coba lagi nanti.");
+                                }
+                            } else if (!response.ok) {
+                                throw new Error(`HTTP error! Status: ${response.status}`);
+                            } else {
+                                break; // Success
+                            }
+                        } catch (error) {
+                            if (retries === maxRetries - 1) {
+                                throw error;
+                            }
+                            retries++;
+                            await delay(Math.pow(2, retries) * 1000);
+                        }
+                    }
+
+                    if (!response || !response.ok) {
+                       throw new Error("Gagal membuat gambar. Periksa konsol untuk detail.");
+                    }
+
+                    const result = await response.json();
+                    const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+
+                    if (base64Data) {
+                        const imageUrl = `data:image/png;base64,${base64Data}`;
+                        generatedImage.src = imageUrl;
+                        generatedImage.classList.remove('hidden');
+                        placeholderText.classList.add('hidden');
+                        downloadBtn.classList.remove('hidden');
+                    } else {
+                        showMessage("Tidak dapat membuat gambar. Coba deskripsi yang berbeda.");
+                    }
+                } catch (error) {
+                    console.error('Error generating image:', error);
+                    showMessage(`Error: ${error.message}`);
+                } finally {
+                    // Hide loading state
+                    buttonText.classList.remove('hidden');
+                    loadingIndicator.classList.add('hidden');
+                    generateBtn.disabled = false;
+                }
+            });
+
+            downloadBtn.addEventListener('click', () => {
+                const link = document.createElement('a');
+                link.href = generatedImage.src;
+                link.download = 'seni-nano-gambar.png';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+
+            function showMessage(msg) {
+                if (msg) {
+                    messageBox.textContent = msg;
+                    messageBox.classList.remove('hidden');
+                } else {
+                    messageBox.textContent = "";
+                    messageBox.classList.add('hidden');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
